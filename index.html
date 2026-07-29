@@ -1,0 +1,1726 @@
+<!DOCTYPE html>
+<html lang="zh" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yearly Budget Forecast — 年度预算预测</title>
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.4.2/dist/dexie.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <style>
+    /* ========== THEME VARIABLES ========== */
+    :root[data-theme="dark"] {
+      --bg: #0f172a; --card: #1e293b; --border: #334155;
+      --text: #e2e8f0; --muted: #94a3b8; --input-bg: #0f172a;
+      --green: #4ade80; --red: #f87171; --blue: #38bdf8; --yellow: #fbbf24; 
+      --purple: #a78bfa; --cyan: #22d3ee; --orange: #fb923c;
+    }
+
+    :root[data-theme="light"] {
+      --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0;
+      --text: #0f172a; --muted: #64748b; --input-bg: #f1f5f9;
+      --green: #16a34a; --red: #dc2626; --blue: #0284c7; --yellow: #d97706; 
+      --purple: #7c3aed; --cyan: #0891b2; --orange: #ea580c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.3s, color 0.3s; }
+    .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+    
+    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+    h1 { font-size: 24px; }
+    .subtitle { color: var(--muted); font-size: 14px; }
+    
+    .header-actions { display: flex; gap: 10px; align-items: center; }
+
+    .theme-toggle-btn {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 14px;
+      display: flex; align-items: center; gap: 8px; transition: all 0.2s;
+    }
+    .theme-toggle-btn:hover { border-color: var(--blue); }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab { background: var(--card); border: 1px solid var(--border); color: var(--muted); padding: 10px 20px; border-radius: 10px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+    .tab:hover { border-color: var(--blue); color: var(--text); }
+    .tab.active { background: var(--blue); color: #fff; border-color: var(--blue); font-weight: 600; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin-bottom: 16px; transition: background 0.3s, border-color 0.3s; }
+    .card-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .stat-box { text-align: center; padding: 20px; }
+    .stat-value { font-size: 24px; font-weight: 700; }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input, select, textarea {
+      width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--text);
+      padding: 10px 14px; border-radius: 10px; font-size: 14px; outline: none; transition: border 0.2s, background 0.3s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--blue); }
+    input[type="number"] { text-align: right; }
+
+    .btn {
+      background: var(--blue); color: #fff; border: none; padding: 10px 24px; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-danger { background: var(--red); color: white; }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+    .btn-outline { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+    td { vertical-align: middle; }
+
+    .sticky-col-1 { position: sticky; left: 0; background: var(--card); z-index: 2; border-right: 1px solid var(--border); width: 100px; min-width: 100px; }
+    .sticky-col-2 { position: sticky; left: 100px; background: var(--card); z-index: 2; border-right: 2px solid var(--border); width: 150px; min-width: 150px; }
+    th.sticky-col-1, th.sticky-col-2 { z-index: 3; }
+
+    .policy-col { width: 140px; min-width: 140px; max-width: 140px; }
+
+    .header-input-wrap { display: flex; align-items: center; gap: 4px; }
+    .header-input {
+      flex: 1; background: transparent; border: 1px dashed var(--border); color: var(--blue);
+      font-weight: 600; text-align: center; font-size: 12px; padding: 4px; border-radius: 6px; width: 100%;
+    }
+    .header-input:focus { border-style: solid; border-color: var(--blue); background: var(--input-bg); }
+    .del-col-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 4px; vertical-align: middle; }
+    .del-col-btn:hover { color: var(--red); background: rgba(248,113,113,0.1); }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+    .badge-bank { background: rgba(56,189,248,0.15); color: var(--blue); }
+    .badge-invest { background: rgba(167,139,250,0.15); color: var(--purple); }
+
+    .chart-container { position: relative; height: 320px; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 100; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-title { font-size: 18px; font-weight: 600; }
+    .close-btn { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; }
+    
+    .action-btns { display: flex; gap: 8px; align-items: center; }
+    .icon-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 4px 6px; border-radius: 4px; transition: color 0.2s, background 0.2s; }
+    .icon-btn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .icon-btn.edit:hover { color: var(--blue); }
+    .icon-btn.delete:hover { color: var(--red); }
+
+    .range-row { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 10px; }
+    .range-row input { flex: 1; }
+    .year-nav { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    .year-nav input { width: auto; min-width: 100px; }
+    .summary-table th, .summary-table td { text-align: right; padding: 8px 6px; }
+    .summary-table th:first-child, .summary-table td:first-child { text-align: left; }
+    .summary-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .ref-table input { padding: 6px 8px; font-size: 12px; }
+    
+    th.th-baseline { color: var(--blue); min-width: 160px; text-align: center; }
+    th.th-actual { color: var(--green); min-width: 150px; text-align: center; }
+    th.th-live { color: var(--yellow); min-width: 150px; text-align: center; }
+    .actual-input {
+      width: 120px; text-align: right; background: var(--input-bg);
+      border: 1px solid var(--border); color: var(--green); font-weight: bold;
+      padding: 4px 8px; border-radius: 6px; font-size: 13px;
+    }
+    .actual-input:focus { border-color: var(--green); }
+    .badge-pos { color: var(--green); font-weight: 600; text-align: right; }
+    .badge-neg { color: var(--red); font-weight: 600; text-align: right; }
+    .badge-zero { color: var(--muted); text-align: right; }
+
+    /* ========== APP LOCK & TOGGLE SWITCH STYLES ========== */
+    #lock-screen {
+      position: fixed; inset: 0; background: var(--bg); z-index: 1000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .lock-box {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 32px; width: 100%; max-width: 400px; text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+    .lock-icon { font-size: 48px; color: var(--blue); margin-bottom: 16px; }
+    .toggle-switch {
+      position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--border); transition: .3s; border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+      background-color: white; transition: .3s; border-radius: 50%;
+    }
+    input:checked + .slider { background-color: var(--blue); }
+    input:checked + .slider:before { transform: translateX(20px); }
+
+    @media (max-width: 768px) {
+      .container { padding: 12px; }
+      .grid-4 { grid-template-columns: 1fr; }
+      th, td { padding: 6px 4px; font-size: 11px; }
+    }
+  </style>
+  <!-- PWA / Offline Support -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Budget Forecast">
+  <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+</head>
+<body>
+
+  <!-- ========== APP LOCK OVERLAY ========== -->
+  <div id="lock-screen">
+    <div class="lock-box">
+      <i class="fas fa-user-lock lock-icon"></i>
+      <h2 id="lock-title" style="margin-bottom:8px;">访问密码</h2>
+      <p id="lock-subtitle" style="color:var(--muted); font-size:13px; margin-bottom:20px;">请输入 Passcode 解锁应用</p>
+      <form id="lock-form" onsubmit="handleLockSubmit(event)">
+        <div class="form-group">
+          <input type="password" id="passcode-input" placeholder="输入密码..." required style="text-align:center; font-size:18px; letter-spacing:2px;">
+        </div>
+        <div id="confirm-passcode-group" class="form-group" style="display:none;">
+          <input type="password" id="passcode-confirm-input" placeholder="确认新密码..." style="text-align:center; font-size:18px; letter-spacing:2px;">
+        </div>
+        <p id="lock-error" style="color:var(--red); font-size:12px; display:none; margin-bottom:12px;"></p>
+        <button type="submit" class="btn" style="width:100%; justify-content:center;" id="lock-btn">解锁</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="header-bar">
+      <div>
+        <h1><i class="fas fa-chart-line"></i> Dynamic Budget Forecast</h1>
+        <p class="subtitle">支持分阶段账户结余分配比例与赤字扣款优先级动态调整 (加密增强版)</p>
+      </div>
+      <div class="header-actions">
+        <button class="theme-toggle-btn" onclick="lockApp()"><i class="fas fa-lock"></i> 锁定</button>
+        <button class="theme-toggle-btn" onclick="toggleTheme()">
+          <i class="fas fa-moon" id="theme-icon"></i> <span id="theme-text">Dark Mode</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-page="funds"><i class="fas fa-university"></i> 账户与阶段规则</div>
+      <div class="tab" data-page="income"><i class="fas fa-hand-holding-dollar"></i> 收入来源</div>
+      <div class="tab" data-page="expense"><i class="fas fa-cart-shopping"></i> 支出预算</div>
+      <div class="tab" data-page="forecast"><i class="fas fa-crystal-ball"></i> 年度预测</div>
+      <div class="tab" data-page="settings"><i class="fas fa-cog"></i> 设置与备份</div>
+    </div>
+
+    <!-- ========== FUNDS ========== -->
+    <div class="page active" id="page-funds">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div class="card-title" style="margin:0"><i class="fas fa-university" style="color:var(--blue)"></i> 资金账户</div>
+          <button class="btn" onclick="openFundModal()"><i class="fas fa-plus"></i> 新增账户</button>
+        </div>
+        <div id="funds-list"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div class="card-title" style="margin:0"><i class="fas fa-sliders" style="color:var(--purple)"></i> 分阶段规则 (Priority & Allocation)</div>
+          <button class="btn btn-outline" onclick="openRuleModal()"><i class="fas fa-plus"></i> 新增阶段规则</button>
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">按年份阶段配置优先级 (Priority 1最高) 和分配比例。</p>
+        <div id="rules-list"></div>
+      </div>
+    </div>
+
+    <!-- ========== INCOME ========== -->
+    <div class="page" id="page-income">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div class="card-title" style="margin:0"><i class="fas fa-hand-holding-dollar" style="color:var(--green)"></i> 收入来源</div>
+          <button class="btn" onclick="openIncomeModal()"><i class="fas fa-plus"></i> 新增收入</button>
+        </div>
+        <div id="income-list"></div>
+      </div>
+    </div>
+
+    <!-- ========== EXPENSE ========== -->
+    <div class="page" id="page-expense">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div class="card-title" style="margin:0"><i class="fas fa-cart-shopping" style="color:var(--red)"></i> 支出预算</div>
+          <button class="btn" onclick="openExpenseModal()"><i class="fas fa-plus"></i> 新增支出</button>
+        </div>
+        <div id="expense-list"></div>
+      </div>
+
+      <!-- REFERENCE TABLE 1: FIXED EXPENSES ESTIMATOR -->
+      <div class="card" style="margin-top:20px;">
+        <div class="card-title"><i class="fas fa-calculator" style="color:var(--orange)"></i> 年度固定支出估算参考表 (Reference Draft)</div>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">用于估算月度到年度的固定支出项目，支持自由添加、修改或删除。</p>
+        <div style="overflow-x:auto;">
+          <table class="ref-table" id="ref-fixed-table">
+            <thead>
+              <tr>
+                <th>类别 (Category)</th>
+                <th>支出项目 (Expense Item)</th>
+                <th>月度/单次 ($)</th>
+                <th>频次 (Frequency)</th>
+                <th>年度合计 ($)</th>
+                <th>备注/编号</th>
+                <th>到期日</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input type="text" placeholder="例如: 家庭" /></td>
+                <td><input type="text" placeholder="项目名称" /></td>
+                <td><input type="number" class="m-amt" value="0" oninput="calcFixedRef()" /></td>
+                <td><select class="m-freq" onchange="calcFixedRef()"><option value="12">Monthly</option><option value="1">One-off</option></select></td>
+                <td><input type="text" class="y-amt" readonly value="$0.00" /></td>
+                <td><input type="text" placeholder="备注信息" /></td>
+                <td><input type="text" placeholder="例如: 每月 1日" /></td>
+                <td><button class="icon-btn delete" onclick="this.closest('tr').remove(); calcFixedRef();"><i class="fas fa-trash"></i></button></td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4" style="text-align:right; font-weight:600;">年度支出合计 (Grand Total):</td>
+                <td style="font-weight:700; color:var(--yellow);" id="fixed-ref-total">$0.00</td>
+                <td colspan="3"><button class="btn btn-sm btn-outline" onclick="addFixedRefRow()">+ 新增估算行</button></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      <!-- REFERENCE TABLE 2: INSURANCE POLICIES TRACKER -->
+      <div class="card" style="margin-top:20px;">
+        <div class="card-title"><i class="fas fa-shield-halved" style="color:var(--blue)"></i> 年度保险支出明细参考表 (Insurance Premiums Tracker)</div>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">
+          <b>年度保费总额 ($)</b> 已前置放在年份右侧方便查看。列大小固定，各保单列支持灵活删除或新增。
+        </p>
+        <div style="overflow-x:auto; max-width:100%;">
+          <table class="ref-table" id="ref-ins-table">
+            <thead>
+              <tr>
+                <th class="sticky-col-1">年份 (Year)</th>
+                <th class="sticky-col-2" style="color: var(--cyan);">年度保费总额 ($)</th>
+                <th class="policy-col"><div class="header-input-wrap"><input type="text" class="header-input" value="Policy 1" /><button class="del-col-btn" onclick="deleteInsColumn(this)" title="删除此保单列">&times;</button></div></th>
+                <th class="policy-col"><div class="header-input-wrap"><input type="text" class="header-input" value="Policy 2" /><button class="del-col-btn" onclick="deleteInsColumn(this)" title="删除此保单列">&times;</button></div></th>
+                <th style="width: 60px; min-width: 60px; text-align: center;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="sticky-col-1"><input type="number" value="2027" /></td>
+                <td class="sticky-col-2"><input type="text" class="ins-tot" readonly value="$0.00" style="font-weight:bold; color:var(--cyan);" /></td>
+                <td class="policy-col"><input type="number" class="ins-val" value="0" oninput="calcInsRef()" /></td>
+                <td class="policy-col"><input type="number" class="ins-val" value="0" oninput="calcInsRef()" /></td>
+                <td style="text-align: center;"><button class="icon-btn delete" onclick="this.closest('tr').remove(); calcInsRef();"><i class="fas fa-trash"></i></button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button class="btn btn-sm btn-outline" onclick="addInsRefRow()">+ 新增年份行</button>
+          <button class="btn btn-sm btn-outline" onclick="addInsColumn()">+ 新增保单列</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== FORECAST ========== -->
+    <div class="page" id="page-forecast">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-crystal-ball" style="color:var(--purple)"></i> 年度预测总览</div>
+        <div class="year-nav">
+          <label style="margin:0">预测起始年：</label>
+          <input type="number" id="forecast-start-year" value="2027" min="2000" max="2100">
+          <label style="margin:0">到</label>
+          <input type="number" id="forecast-end-year" value="2056" min="2000" max="2100">
+          <button class="btn" onclick="runForecast()">生成预测</button>
+        </div>
+      </div>
+
+      <div class="grid-4" id="forecast-summary-cards"></div>
+
+      <!-- YEARLY SNAPSHOT CARD -->
+      <div class="card" style="margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+          <div class="card-title" style="margin:0;"><i class="fas fa-wallet" style="color:var(--green)"></i> 特定年份资金快照 (Yearly Balance Snapshot)</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label style="margin:0; font-weight:600;">选择年份：</label>
+            <select id="snapshot-year-select" style="width:auto; padding:6px 16px;" onchange="updateYearSnapshot()"></select>
+          </div>
+        </div>
+        <div class="grid-4" id="snapshot-cards"></div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="card-title"><i class="fas fa-chart-area" style="color:var(--blue)"></i> 年度收支趋势</div>
+        <div class="chart-container"><canvas id="forecastChart"></canvas></div>
+      </div>
+
+      <!-- MAIN DYNAMIC FORECAST TABLE -->
+      <div class="card">
+        <div class="card-title"><i class="fas fa-table" style="color:var(--cyan)"></i> 年度资金明细</div>
+        <div style="overflow-x:auto;">
+          <table class="summary-table" id="forecast-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- BASELINE VS ACTUAL COMPARISON ENGINE -->
+      <div class="card" style="margin-top:20px; border: 1px solid var(--blue);">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+          <div>
+            <div class="card-title" style="margin:0; color:var(--blue);"><i class="fas fa-code-compare"></i> 基准预测与实际对比 (Baseline vs. EOY Actual)</div>
+            <p style="color:var(--muted); font-size:12px; margin-top:4px;">冻结当前 Column 1 (所有账户总额) 作为基准列。即使后续因调整收支导致预测变动，冻结列保持不变，用于与每年实收数据对比。</p>
+          </div>
+          <button class="btn" onclick="freezeCurrentBaseline()" style="background:var(--purple);"><i class="fas fa-camera"></i> 冻结当前预测为基准列 (Freeze Baseline)</button>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table class="summary-table" id="baseline-comparison-table">
+            <thead>
+              <tr id="baseline-table-header">
+                <th style="text-align:center;">年份</th>
+                <th class="th-live">实时动态预测<br><small>(DYNAMIC LIVE)</small></th>
+                <th class="th-actual">实际决算总额<br><small>(MANUAL EOY)</small></th>
+                <th style="text-align:right;">偏差金额 ($)</th>
+                <th style="text-align:right;">偏差比例 (%)</th>
+              </tr>
+            </thead>
+            <tbody id="baseline-table-body">
+              <tr><td colspan="5" style="text-align:center; color:var(--muted);">请点击“生成预测”加载数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========== SETTINGS & BACKUP ========== -->
+    <div class="page" id="page-settings">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-key" style="color:var(--yellow)"></i> 安全与锁屏设置</div>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">修改或重置主解锁密码 (Passcode)。</p>
+        <button class="btn btn-outline" onclick="promptChangePasscode()"><i class="fas fa-shield-halved"></i> 修改解锁密码</button>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="card-title"><i class="fas fa-file-export" style="color:var(--blue)"></i> 数据备份与恢复 (Data Backup & Restore)</div>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:16px;">
+          导出整个数据库为 JSON 文件进行本地备份，或导入备份 JSON 恢复数据。
+        </p>
+
+        <!-- BACKUP ENCRYPTION TOGGLE SWITCH -->
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; background:var(--input-bg); padding:12px; border-radius:10px; border:1px solid var(--border);">
+          <label class="toggle-switch">
+            <input type="checkbox" id="export-encrypt-toggle" checked>
+            <span class="slider"></span>
+          </label>
+          <div>
+            <span style="font-weight:600; font-size:14px;">导出备份时进行加密保护</span>
+            <div style="color:var(--muted); font-size:12px; margin-top:2px;">明文备份不含密码保护，请妥善保管</div>
+          </div>
+        </div>
+        
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <button class="btn" onclick="exportDataToJson()"><i class="fas fa-download"></i> 导出备份 (Export JSON)</button>
+          <button class="btn btn-outline" onclick="document.getElementById('import-file-input').click()"><i class="fas fa-upload"></i> 导入备份 (Import JSON)</button>
+          <input type="file" id="import-file-input" accept=".json" style="display:none;" onchange="importDataFromJson(event)">
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px; border: 1px solid var(--red);">
+        <div class="card-title" style="color:var(--red);"><i class="fas fa-triangle-exclamation"></i> 重置系统</div>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:16px;">
+          此操作将彻底清空数据库中存储的所有账户、规则、收入、支出、基准冻结列以及密码设置。
+        </p>
+        <button class="btn btn-danger" onclick="resetAllData()"><i class="fas fa-trash-can"></i> 重置所有数据 (Reset All Data)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALS -->
+  <div class="modal-overlay" id="fund-modal">
+    <div class="modal">
+      <div class="modal-header"><div class="modal-title" id="fund-modal-title">新增账户</div><button class="close-btn" onclick="closeFundModal()">&times;</button></div>
+      <form id="fund-form" onsubmit="saveFund(event)">
+        <input type="hidden" id="fund-id">
+        <div class="form-group"><label>账户名称</label><input type="text" id="fund-name" required placeholder="例如: Fixed Deposit"></div>
+        <div class="form-group"><label>账户类型</label><select id="fund-type"><option value="bank">银行/储蓄</option><option value="invest">投资账户</option></select></div>
+        <div class="form-group"><label>初始金额 ($)</label><input type="number" id="fund-initial" step="0.01" min="0" required></div>
+        <div class="form-group"><label>预期年回报率 (%)</label><input type="number" id="fund-return" step="0.01" min="0" required></div>
+        <div style="display:flex;gap:12px;justify-content:flex-end;"><button type="button" class="btn btn-outline" onclick="closeFundModal()">取消</button><button type="submit" class="btn">保存</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="rule-modal">
+    <div class="modal">
+      <div class="modal-header"><div class="modal-title" id="rule-modal-title">新增阶段规则</div><button class="close-btn" onclick="closeRuleModal()">&times;</button></div>
+      <form id="rule-form" onsubmit="saveRule(event)">
+        <input type="hidden" id="rule-id">
+        <div class="form-group"><label>对应账户</label><select id="rule-fund-id" required></select></div>
+        <div class="range-row">
+          <div class="form-group" style="flex:1;"><label>起始年份</label><input type="number" id="rule-start" required min="2000" max="2100"></div>
+          <div class="form-group" style="flex:1;"><label>结束年份</label><input type="number" id="rule-end" required min="2000" max="2100"></div>
+        </div>
+        <div class="form-group"><label>优先级 (Priority 1最高)</label><input type="number" id="rule-priority" required min="1"></div>
+        <div class="form-group"><label>分配比例 (%)</label><input type="number" id="rule-alloc" required min="0" max="100"></div>
+        <div style="display:flex;gap:12px;justify-content:flex-end;"><button type="button" class="btn btn-outline" onclick="closeRuleModal()">取消</button><button type="submit" class="btn">保存</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="income-modal">
+    <div class="modal">
+      <div class="modal-header"><div class="modal-title" id="income-modal-title">新增收入</div><button class="close-btn" onclick="closeIncomeModal()">&times;</button></div>
+      <form id="income-form" onsubmit="saveIncome(event)">
+        <input type="hidden" id="income-id">
+        <div class="form-group"><label>名称</label><input type="text" id="income-name" required placeholder="例如: Warehouse Rental"></div>
+        <div id="income-ranges"></div>
+        <button type="button" class="btn btn-sm btn-outline" onclick="addIncomeRange()" style="margin-bottom:12px;">+ 年份范围</button>
+        <div style="display:flex;gap:12px;justify-content:flex-end;"><button type="button" class="btn btn-outline" onclick="closeIncomeModal()">取消</button><button type="submit" class="btn">保存</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="expense-modal">
+    <div class="modal">
+      <div class="modal-header"><div class="modal-title" id="expense-modal-title">新增支出</div><button class="close-btn" onclick="closeExpenseModal()">&times;</button></div>
+      <form id="expense-form" onsubmit="saveExpense(event)">
+        <input type="hidden" id="expense-id">
+        <div class="form-group"><label>名称</label><input type="text" id="expense-name" required placeholder="例如: 家庭 / 保险"></div>
+        <div id="expense-ranges"></div>
+        <button type="button" class="btn btn-sm btn-outline" onclick="addExpenseRange()" style="margin-bottom:12px;">+ 年份范围</button>
+        <div style="display:flex;gap:12px;justify-content:flex-end;"><button type="button" class="btn btn-outline" onclick="closeExpenseModal()">取消</button><button type="submit" class="btn">保存</button></div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // WEB CRYPTO ENCRYPTION ENGINE (PBKDF2 + AES-GCM-256)
+    // =========================================================================
+    let masterCryptoKey = null;
+
+    async function deriveCryptoKey(passcode, salt) {
+      const enc = new TextEncoder();
+      const keyMaterial = await window.crypto.subtle.importKey(
+        "raw", enc.encode(passcode), "PBKDF2", false, ["deriveKey"]
+      );
+      return await window.crypto.subtle.deriveKey(
+        {
+          name: "PBKDF2",
+          salt: salt,
+          iterations: 100000,
+          hash: "SHA-256"
+        },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    async function encryptData(object, key) {
+      if (!key) return object;
+      const enc = new TextEncoder();
+      const iv = window.crypto.getRandomValues(new Uint8Array(12));
+      const plaintext = enc.encode(JSON.stringify(object));
+      const ciphertext = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv },
+        key,
+        plaintext
+      );
+      return {
+        __encrypted: true,
+        iv: Array.from(iv),
+        data: Array.from(new Uint8Array(ciphertext))
+      };
+    }
+
+    async function decryptData(encryptedObj, key) {
+      if (!encryptedObj || !encryptedObj.__encrypted) return encryptedObj;
+      if (!key) throw new Error("Key not available for decryption");
+      const dec = new TextDecoder();
+      const iv = new Uint8Array(encryptedObj.iv);
+      const data = new Uint8Array(encryptedObj.data);
+      const plaintext = await window.crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: iv },
+        key,
+        data
+      );
+      return JSON.parse(dec.decode(plaintext));
+    }
+
+    function arrayBufferToBase64(buf) {
+      return btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
+    }
+    function base64ToArrayBuffer(base64) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+
+    // =========================================================================
+    // INDEXEDDB DATABASE WITH TRANSPARENT ENCRYPTION
+    // =========================================================================
+    const db = new Dexie('YearlyBudgetDB_v3');
+    db.version(5).stores({
+      funds: '++id',
+      fundRules: '++id, fundId',
+      incomeSources: '++id',
+      incomeRanges: '++id, sourceId',
+      expenseCategories: '++id',
+      expenseRanges: '++id, categoryId',
+      baselines: '++id',
+      baselineValues: '++id, baselineId',
+      actuals: '++id, year',
+      appSettings: 'key'
+    });
+
+    // DB Encrypt/Decrypt Wrappers
+    async function dbGet(table, key) {
+      const rec = await db[table].get(key);
+      if (!rec) return null;
+      const decrypted = await decryptData(rec.payload, masterCryptoKey);
+      decrypted.id = rec.id;
+      return decrypted;
+    }
+
+    async function dbGetAll(table) {
+      const recs = await db[table].toArray();
+      const list = [];
+      for (const r of recs) {
+        if (r.payload) {
+          const item = await decryptData(r.payload, masterCryptoKey);
+          item.id = r.id;
+          list.push(item);
+        } else {
+          list.push(r);
+        }
+      }
+      return list;
+    }
+
+    async function dbAdd(table, item) {
+      const payload = await encryptData(item, masterCryptoKey);
+      return await db[table].add({ payload });
+    }
+
+    async function dbUpdate(table, id, item) {
+      const payload = await encryptData(item, masterCryptoKey);
+      return await db[table].update(id, { payload });
+    }
+
+    async function dbDelete(table, id) {
+      return await db[table].delete(id);
+    }
+
+    // =========================================================================
+    // APP LOCK & AUTHENTICATION FLOW
+    // =========================================================================
+    let isSetupMode = false;
+
+    async function initAuth() {
+      const authSetting = await db.appSettings.get('auth');
+      const lockScreen = document.getElementById('lock-screen');
+      const lockTitle = document.getElementById('lock-title');
+      const lockSub = document.getElementById('lock-subtitle');
+      const confirmGroup = document.getElementById('confirm-passcode-group');
+      const lockBtn = document.getElementById('lock-btn');
+
+      if (!authSetting) {
+        isSetupMode = true;
+        lockTitle.innerText = "设置主锁屏密码";
+        lockSub.innerText = "首次使用，请配置专属 Passcode 以加密保护数据";
+        confirmGroup.style.display = "block";
+        lockBtn.innerText = "设定密码并初始化";
+        lockScreen.style.display = "flex";
+      } else {
+        isSetupMode = false;
+        lockTitle.innerText = "访问密码锁";
+        lockSub.innerText = "请输入 Passcode 解锁应用并解密数据";
+        confirmGroup.style.display = "none";
+        lockBtn.innerText = "解锁";
+        lockScreen.style.display = "flex";
+      }
+    }
+
+    async function handleLockSubmit(e) {
+      e.preventDefault();
+      const pass = document.getElementById('passcode-input').value;
+      const confirmPass = document.getElementById('passcode-confirm-input').value;
+      const errEl = document.getElementById('lock-error');
+      errEl.style.display = 'none';
+
+      if (isSetupMode) {
+        if (pass.length < 4) {
+          errEl.innerText = "密码长度至少需要 4 位"; errEl.style.display = 'block'; return;
+        }
+        if (pass !== confirmPass) {
+          errEl.innerText = "两次输入的密码不一致"; errEl.style.display = 'block'; return;
+        }
+
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        masterCryptoKey = await deriveCryptoKey(pass, salt);
+
+        const encCheck = await window.crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: new Uint8Array(12) },
+          masterCryptoKey,
+          new TextEncoder().encode("VALID_PASSPHRASE")
+        );
+
+        await db.appSettings.put({
+          key: 'auth',
+          salt: Array.from(salt),
+          verifier: Array.from(new Uint8Array(encCheck))
+        });
+
+        document.getElementById('lock-screen').style.display = 'none';
+        document.getElementById('passcode-input').value = '';
+        document.getElementById('passcode-confirm-input').value = '';
+        renderAll();
+      } else {
+        const authSetting = await db.appSettings.get('auth');
+        const salt = new Uint8Array(authSetting.salt);
+        const testKey = await deriveCryptoKey(pass, salt);
+
+        try {
+          const dec = await window.crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: new Uint8Array(12) },
+            testKey,
+            new Uint8Array(authSetting.verifier)
+          );
+          const val = new TextDecoder().decode(dec);
+          if (val === "VALID_PASSPHRASE") {
+            masterCryptoKey = testKey;
+            document.getElementById('lock-screen').style.display = 'none';
+            document.getElementById('passcode-input').value = '';
+            renderAll();
+          } else {
+            throw new Error();
+          }
+        } catch (err) {
+          errEl.innerText = "密码错误，解锁失败"; errEl.style.display = 'block';
+        }
+      }
+    }
+
+    function lockApp() {
+      masterCryptoKey = null;
+      initAuth();
+    }
+
+    async function promptChangePasscode() {
+      const oldPass = prompt("请输入当前旧密码：");
+      if (!oldPass) return;
+
+      const authSetting = await db.appSettings.get('auth');
+      const salt = new Uint8Array(authSetting.salt);
+      const testKey = await deriveCryptoKey(oldPass, salt);
+
+      try {
+        const dec = await window.crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: new Uint8Array(12) },
+          testKey,
+          new Uint8Array(authSetting.verifier)
+        );
+        if (new TextDecoder().decode(dec) !== "VALID_PASSPHRASE") throw new Error();
+      } catch (err) {
+        alert("旧密码验证失败！"); return;
+      }
+
+      const newPass = prompt("请输入新的解锁密码（至少4位）：");
+      if (!newPass || newPass.length < 4) { alert("新密码不符合规范！"); return; }
+
+      // Read unencrypted data from existing stores
+      const funds = await dbGetAll('funds');
+      const rules = await dbGetAll('fundRules');
+      const incomes = await dbGetAll('incomeSources');
+      const incRanges = await dbGetAll('incomeRanges');
+      const expenses = await dbGetAll('expenseCategories');
+      const expRanges = await dbGetAll('expenseRanges');
+      const baselines = await dbGetAll('baselines');
+      const baseVals = await dbGetAll('baselineValues');
+      const actuals = await dbGetAll('actuals');
+
+      // Re-derive new key
+      const newSalt = window.crypto.getRandomValues(new Uint8Array(16));
+      masterCryptoKey = await deriveCryptoKey(newPass, newSalt);
+
+      const encCheck = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: new Uint8Array(12) },
+        masterCryptoKey,
+        new TextEncoder().encode("VALID_PASSPHRASE")
+      );
+
+      await db.appSettings.put({
+        key: 'auth',
+        salt: Array.from(newSalt),
+        verifier: Array.from(new Uint8Array(encCheck))
+      });
+
+      // Re-encrypt database with new key
+      await db.funds.clear(); for(const f of funds) await dbAdd('funds', f);
+      await db.fundRules.clear(); for(const r of rules) await dbAdd('fundRules', r);
+      await db.incomeSources.clear(); for(const i of incomes) await dbAdd('incomeSources', i);
+      await db.incomeRanges.clear(); for(const ir of incRanges) await dbAdd('incomeRanges', ir);
+      await db.expenseCategories.clear(); for(const e of expenses) await dbAdd('expenseCategories', e);
+      await db.expenseRanges.clear(); for(const er of expRanges) await dbAdd('expenseRanges', er);
+      await db.baselines.clear(); for(const b of baselines) await dbAdd('baselines', b);
+      await db.baselineValues.clear(); for(const bv of baseVals) await dbAdd('baselineValues', bv);
+      await db.actuals.clear(); for(const a of actuals) await dbAdd('actuals', a);
+
+      alert("解锁密码修改成功！数据已重组加密。");
+    }
+
+    // =========================================================================
+    // UI & DOM BUSINESS LOGIC
+    // =========================================================================
+    function toggleTheme() {
+      const htmlEl = document.documentElement;
+      const icon = document.getElementById('theme-icon');
+      const text = document.getElementById('theme-text');
+      
+      if (htmlEl.getAttribute('data-theme') === 'dark') {
+        htmlEl.setAttribute('data-theme', 'light');
+        icon.className = 'fas fa-sun'; text.innerText = 'Light Mode';
+      } else {
+        htmlEl.setAttribute('data-theme', 'dark');
+        icon.className = 'fas fa-moon'; text.innerText = 'Dark Mode';
+      }
+    }
+
+    let forecastChart = null;
+    let globalForecastData = [];
+    let globalFunds = [];
+
+    async function init() {
+      await initAuth();
+    }
+
+    function renderAll() {
+      if(!masterCryptoKey) return;
+      loadFunds(); loadRules(); loadIncome(); loadExpense();
+    }
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('page-' + tab.dataset.page).classList.add('active');
+      });
+    });
+
+    // FUNDS & RULES
+    async function loadFunds() {
+      const funds = await dbGetAll('funds');
+      const container = document.getElementById('funds-list');
+      if (!funds.length) { container.innerHTML = '<div class="empty-state">暂无账户</div>'; return; }
+      container.innerHTML = `<table><thead><tr><th>账户</th><th>类型</th><th>初始金额</th><th>年回报率</th><th>操作</th></tr></thead><tbody>
+        ${funds.map(f => `<tr>
+          <td><b>${f.name}</b></td>
+          <td><span class="badge badge-${f.type==='bank'?'bank':'invest'}">${f.type==='bank'?'银行':'投资'}</span></td>
+          <td>${formatMoney(f.initialAmount)}</td>
+          <td>${f.returnRate}%</td>
+          <td>
+            <div class="action-btns">
+              <button class="icon-btn edit" title="编辑账户" onclick="editFund(${f.id})"><i class="fas fa-edit"></i></button>
+              <button class="icon-btn delete" title="删除账户" onclick="deleteFund(${f.id})"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>`).join('')}
+      </tbody></table>`;
+
+      const select = document.getElementById('rule-fund-id');
+      select.innerHTML = funds.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+    }
+
+    async function loadRules() {
+      const rules = await dbGetAll('fundRules');
+      const funds = await dbGetAll('funds');
+      const fundMap = {}; funds.forEach(f => fundMap[f.id] = f.name);
+
+      const container = document.getElementById('rules-list');
+      if (!rules.length) { container.innerHTML = '<div class="empty-state">暂无分阶段规则</div>'; return; }
+      
+      container.innerHTML = `<table><thead><tr><th>年份范围</th><th>账户</th><th>优先级 (Priority)</th><th>分配比例 (%)</th><th>操作</th></tr></thead><tbody>
+        ${rules.map(r => `<tr>
+          <td><b>${r.startYear} - ${r.endYear}</b></td>
+          <td>${fundMap[r.fundId] || '未知账户'}</td>
+          <td><span style="color:var(--yellow);font-weight:bold;">${r.priority}</span></td>
+          <td>${r.allocationPct}%</td>
+          <td>
+            <div class="action-btns">
+              <button class="icon-btn edit" title="编辑规则" onclick="editRule(${r.id})"><i class="fas fa-edit"></i></button>
+              <button class="icon-btn delete" title="删除规则" onclick="deleteRule(${r.id})"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>`).join('')}
+      </tbody></table>`;
+    }
+
+    function openFundModal() { 
+      document.getElementById('fund-form').reset(); 
+      document.getElementById('fund-id').value = '';
+      document.getElementById('fund-modal-title').innerText = '新增账户';
+      document.getElementById('fund-modal').classList.add('show'); 
+    }
+    function closeFundModal() { document.getElementById('fund-modal').classList.remove('show'); }
+    
+    async function editFund(id) {
+      const f = await dbGet('funds', id);
+      if (!f) return;
+      document.getElementById('fund-id').value = f.id;
+      document.getElementById('fund-name').value = f.name;
+      document.getElementById('fund-type').value = f.type;
+      document.getElementById('fund-initial').value = f.initialAmount;
+      document.getElementById('fund-return').value = f.returnRate;
+      document.getElementById('fund-modal-title').innerText = '编辑账户';
+      document.getElementById('fund-modal').classList.add('show');
+    }
+
+    async function saveFund(e) {
+      e.preventDefault();
+      const id = document.getElementById('fund-id').value;
+      const data = {
+        name: document.getElementById('fund-name').value,
+        type: document.getElementById('fund-type').value,
+        initialAmount: parseFloat(document.getElementById('fund-initial').value)||0,
+        returnRate: parseFloat(document.getElementById('fund-return').value)||0
+      };
+
+      if (id) {
+        await dbUpdate('funds', parseInt(id), data);
+      } else {
+        await dbAdd('funds', data);
+      }
+      closeFundModal(); renderAll();
+    }
+
+    async function deleteFund(id) { 
+      if(confirm('确定删除此账户及其关联规则？')) { 
+        await dbDelete('funds', id); 
+        const rules = await dbGetAll('fundRules');
+        for (const r of rules) {
+          if (r.fundId === id) await dbDelete('fundRules', r.id);
+        }
+        renderAll(); 
+      } 
+    }
+
+    function openRuleModal() { 
+      document.getElementById('rule-form').reset(); 
+      document.getElementById('rule-id').value = '';
+      document.getElementById('rule-modal-title').innerText = '新增阶段规则';
+      document.getElementById('rule-modal').classList.add('show'); 
+    }
+    function closeRuleModal() { document.getElementById('rule-modal').classList.remove('show'); }
+    
+    async function editRule(id) {
+      const r = await dbGet('fundRules', id);
+      if (!r) return;
+      document.getElementById('rule-id').value = r.id;
+      document.getElementById('rule-fund-id').value = r.fundId;
+      document.getElementById('rule-start').value = r.startYear;
+      document.getElementById('rule-end').value = r.endYear;
+      document.getElementById('rule-priority').value = r.priority;
+      document.getElementById('rule-alloc').value = r.allocationPct;
+      document.getElementById('rule-modal-title').innerText = '编辑阶段规则';
+      document.getElementById('rule-modal').classList.add('show');
+    }
+
+    async function saveRule(e) {
+      e.preventDefault();
+      const id = document.getElementById('rule-id').value;
+      const data = {
+        fundId: parseInt(document.getElementById('rule-fund-id').value),
+        startYear: parseInt(document.getElementById('rule-start').value),
+        endYear: parseInt(document.getElementById('rule-end').value),
+        priority: parseInt(document.getElementById('rule-priority').value),
+        allocationPct: parseFloat(document.getElementById('rule-alloc').value)||0
+      };
+
+      if (id) {
+        await dbUpdate('fundRules', parseInt(id), data);
+      } else {
+        await dbAdd('fundRules', data);
+      }
+      closeRuleModal(); loadRules();
+    }
+    async function deleteRule(id) { if(confirm('确定删除此规则？')) { await dbDelete('fundRules', id); loadRules(); } }
+
+    // INCOME & EXPENSE
+    async function loadIncome() {
+      const sources = await dbGetAll('incomeSources');
+      const allRanges = await dbGetAll('incomeRanges');
+      const container = document.getElementById('income-list');
+      if (!sources.length) { container.innerHTML = '<div class="empty-state">暂无收入</div>'; return; }
+      let html = '<table><thead><tr><th>收入项</th><th>年份及金额</th><th>操作</th></tr></thead><tbody>';
+      for (const s of sources) {
+        const ranges = allRanges.filter(r => r.sourceId === s.id);
+        const rText = ranges.map(r => `${r.startYear}-${r.endYear}: ${formatMoney(r.amount)}/年`).join('<br>');
+        html += `<tr>
+          <td><b>${s.name}</b></td>
+          <td style="font-size:11px;">${rText}</td>
+          <td>
+            <div class="action-btns">
+              <button class="icon-btn edit" title="编辑收入项" onclick="editIncome(${s.id})"><i class="fas fa-edit"></i></button>
+              <button class="icon-btn delete" title="删除收入项" onclick="deleteIncome(${s.id})"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>`;
+      }
+      container.innerHTML = html + '</tbody></table>';
+    }
+
+    function openIncomeModal() { 
+      document.getElementById('income-form').reset(); 
+      document.getElementById('income-id').value = '';
+      document.getElementById('income-ranges').innerHTML = ''; 
+      document.getElementById('income-modal-title').innerText = '新增收入';
+      addIncomeRange(); 
+      document.getElementById('income-modal').classList.add('show'); 
+    }
+    function closeIncomeModal() { document.getElementById('income-modal').classList.remove('show'); }
+    function addIncomeRange(startVal = '', endVal = '', amtVal = '') {
+      const div = document.createElement('div'); div.className = 'range-row';
+      div.innerHTML = `<input type="number" placeholder="起始年" class="r-start" value="${startVal}"><input type="number" placeholder="结束年" class="r-end" value="${endVal}"><input type="number" placeholder="金额" class="r-amt" value="${amtVal}"><button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">-</button>`;
+      document.getElementById('income-ranges').appendChild(div);
+    }
+
+    async function editIncome(id) {
+      const source = await dbGet('incomeSources', id);
+      if (!source) return;
+      const allRanges = await dbGetAll('incomeRanges');
+      const ranges = allRanges.filter(r => r.sourceId === id);
+      
+      document.getElementById('income-id').value = source.id;
+      document.getElementById('income-name').value = source.name;
+      document.getElementById('income-ranges').innerHTML = '';
+      
+      if (ranges.length) {
+        ranges.forEach(r => addIncomeRange(r.startYear, r.endYear, r.amount));
+      } else {
+        addIncomeRange();
+      }
+      
+      document.getElementById('income-modal-title').innerText = '编辑收入';
+      document.getElementById('income-modal').classList.add('show');
+    }
+
+    async function saveIncome(e) {
+      e.preventDefault();
+      const id = document.getElementById('income-id').value;
+      const name = document.getElementById('income-name').value;
+      
+      let sId;
+      if (id) {
+        sId = parseInt(id);
+        await dbUpdate('incomeSources', sId, { name });
+        const allRanges = await dbGetAll('incomeRanges');
+        for(const r of allRanges) if(r.sourceId === sId) await dbDelete('incomeRanges', r.id);
+      } else {
+        sId = await dbAdd('incomeSources', { name });
+      }
+
+      for (const row of document.querySelectorAll('#income-ranges .range-row')) {
+        const sYear = parseInt(row.querySelector('.r-start').value);
+        const eYear = parseInt(row.querySelector('.r-end').value);
+        const amt = parseFloat(row.querySelector('.r-amt').value)||0;
+        if (sYear && eYear) {
+          await dbAdd('incomeRanges', { sourceId: sId, startYear: sYear, endYear: eYear, amount: amt });
+        }
+      }
+      closeIncomeModal(); loadIncome();
+    }
+
+    async function deleteIncome(id) { 
+      if(confirm('确定删除此收入来源？')) { 
+        await dbDelete('incomeSources', id); 
+        const allRanges = await dbGetAll('incomeRanges');
+        for(const r of allRanges) if(r.sourceId === id) await dbDelete('incomeRanges', r.id);
+        loadIncome(); 
+      } 
+    }
+
+    async function loadExpense() {
+      const cats = await dbGetAll('expenseCategories');
+      const allRanges = await dbGetAll('expenseRanges');
+      const container = document.getElementById('expense-list');
+      if (!cats.length) { container.innerHTML = '<div class="empty-state">暂无支出</div>'; return; }
+      let html = '<table><thead><tr><th>支出项</th><th>年份及金额</th><th>操作</th></tr></thead><tbody>';
+      for (const c of cats) {
+        const ranges = allRanges.filter(r => r.categoryId === c.id);
+        const rText = ranges.map(r => `${r.startYear}-${r.endYear}: ${formatMoney(r.amount)}/年`).join('<br>');
+        html += `<tr>
+          <td><b>${c.name}</b></td>
+          <td style="font-size:11px;">${rText}</td>
+          <td>
+            <div class="action-btns">
+              <button class="icon-btn edit" title="编辑支出项" onclick="editExpense(${c.id})"><i class="fas fa-edit"></i></button>
+              <button class="icon-btn delete" title="删除支出项" onclick="deleteExpense(${c.id})"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>`;
+      }
+      container.innerHTML = html + '</tbody></table>';
+    }
+
+    function openExpenseModal() { 
+      document.getElementById('expense-form').reset(); 
+      document.getElementById('expense-id').value = '';
+      document.getElementById('expense-ranges').innerHTML = ''; 
+      document.getElementById('expense-modal-title').innerText = '新增支出';
+      addExpenseRange(); 
+      document.getElementById('expense-modal').classList.add('show'); 
+    }
+    function closeExpenseModal() { document.getElementById('expense-modal').classList.remove('show'); }
+    function addExpenseRange(startVal = '', endVal = '', amtVal = '') {
+      const div = document.createElement('div'); div.className = 'range-row';
+      div.innerHTML = `<input type="number" placeholder="起始年" class="r-start" value="${startVal}"><input type="number" placeholder="结束年" class="r-end" value="${endVal}"><input type="number" placeholder="金额" class="r-amt" value="${amtVal}"><button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">-</button>`;
+      document.getElementById('expense-ranges').appendChild(div);
+    }
+
+    async function editExpense(id) {
+      const cat = await dbGet('expenseCategories', id);
+      if (!cat) return;
+      const allRanges = await dbGetAll('expenseRanges');
+      const ranges = allRanges.filter(r => r.categoryId === id);
+      
+      document.getElementById('expense-id').value = cat.id;
+      document.getElementById('expense-name').value = cat.name;
+      document.getElementById('expense-ranges').innerHTML = '';
+      
+      if (ranges.length) {
+        ranges.forEach(r => addExpenseRange(r.startYear, r.endYear, r.amount));
+      } else {
+        addExpenseRange();
+      }
+      
+      document.getElementById('expense-modal-title').innerText = '编辑支出';
+      document.getElementById('expense-modal').classList.add('show');
+    }
+
+    async function saveExpense(e) {
+      e.preventDefault();
+      const id = document.getElementById('expense-id').value;
+      const name = document.getElementById('expense-name').value;
+      
+      let cId;
+      if (id) {
+        cId = parseInt(id);
+        await dbUpdate('expenseCategories', cId, { name });
+        const allRanges = await dbGetAll('expenseRanges');
+        for(const r of allRanges) if(r.categoryId === cId) await dbDelete('expenseRanges', r.id);
+      } else {
+        cId = await dbAdd('expenseCategories', { name });
+      }
+
+      for (const row of document.querySelectorAll('#expense-ranges .range-row')) {
+        const sYear = parseInt(row.querySelector('.r-start').value);
+        const eYear = parseInt(row.querySelector('.r-end').value);
+        const amt = parseFloat(row.querySelector('.r-amt').value)||0;
+        if (sYear && eYear) {
+          await dbAdd('expenseRanges', { categoryId: cId, startYear: sYear, endYear: eYear, amount: amt });
+        }
+      }
+      closeExpenseModal(); loadExpense();
+    }
+
+    async function deleteExpense(id) { 
+      if(confirm('确定删除此支出预算？')) { 
+        await dbDelete('expenseCategories', id); 
+        const allRanges = await dbGetAll('expenseRanges');
+        for(const r of allRanges) if(r.categoryId === id) await dbDelete('expenseRanges', r.id);
+        loadExpense(); 
+      } 
+    }
+
+    // REFERENCE CALCULATOR HELPERS
+    function calcFixedRef() {
+      let grandTotal = 0;
+      document.querySelectorAll('#ref-fixed-table tbody tr').forEach(row => {
+        const mAmt = parseFloat(row.querySelector('.m-amt').value) || 0;
+        const freq = parseFloat(row.querySelector('.m-freq').value) || 12;
+        const total = mAmt * freq;
+        row.querySelector('.y-amt').value = formatMoney(total);
+        grandTotal += total;
+      });
+      document.getElementById('fixed-ref-total').innerText = formatMoney(grandTotal);
+    }
+
+    function addFixedRefRow() {
+      const tbody = document.querySelector('#ref-fixed-table tbody');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" placeholder="类别" /></td>
+        <td><input type="text" placeholder="项目名称" /></td>
+        <td><input type="number" class="m-amt" value="0" oninput="calcFixedRef()" /></td>
+        <td><select class="m-freq" onchange="calcFixedRef()"><option value="12">Monthly</option><option value="1">One-off</option></select></td>
+        <td><input type="text" class="y-amt" readonly value="$0.00" /></td>
+        <td><input type="text" placeholder="备注信息" /></td>
+        <td><input type="text" placeholder="到期时间" /></td>
+        <td><button class="icon-btn delete" onclick="this.closest('tr').remove(); calcFixedRef();"><i class="fas fa-trash"></i></button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    function calcInsRef() {
+      document.querySelectorAll('#ref-ins-table tbody tr').forEach(row => {
+        let total = 0;
+        row.querySelectorAll('.ins-val').forEach(input => total += (parseFloat(input.value) || 0));
+        row.querySelector('.ins-tot').value = formatMoney(total);
+      });
+    }
+
+    function deleteInsColumn(btn) {
+      const th = btn.closest('th');
+      const table = document.getElementById('ref-ins-table');
+      const colIndex = Array.from(th.parentNode.children).indexOf(th);
+      th.remove();
+      table.querySelectorAll('tbody tr').forEach(row => {
+        if (row.children[colIndex]) row.children[colIndex].remove();
+      });
+      calcInsRef();
+    }
+
+    function addInsColumn() {
+      const table = document.getElementById('ref-ins-table');
+      const headerRow = table.querySelector('thead tr');
+      const lastActionTh = headerRow.lastElementChild;
+      const colCount = headerRow.children.length - 2;
+
+      const th = document.createElement('th');
+      th.className = 'policy-col';
+      th.innerHTML = `<div class="header-input-wrap"><input type="text" class="header-input" value="Policy ${colCount}" /><button class="del-col-btn" onclick="deleteInsColumn(this)" title="删除此保单列">&times;</button></div>`;
+      headerRow.insertBefore(th, lastActionTh);
+
+      table.querySelectorAll('tbody tr').forEach(row => {
+        const lastTd = row.lastElementChild;
+        const td = document.createElement('td');
+        td.className = 'policy-col';
+        td.innerHTML = `<input type="number" class="ins-val" value="0" oninput="calcInsRef()" />`;
+        row.insertBefore(td, lastTd);
+      });
+      calcInsRef();
+    }
+
+    function addInsRefRow() {
+      const table = document.getElementById('ref-ins-table');
+      const tbody = table.querySelector('tbody');
+      const colCount = table.querySelector('thead tr').children.length;
+      
+      const lastYearInput = tbody.querySelector('tr:last-child td input');
+      const lastYear = lastYearInput ? parseInt(lastYearInput.value) + 1 : 2027;
+      
+      const tr = document.createElement('tr');
+      let cols = `
+        <td class="sticky-col-1"><input type="number" value="${lastYear}" /></td>
+        <td class="sticky-col-2"><input type="text" class="ins-tot" readonly value="$0.00" style="font-weight:bold; color:var(--cyan);" /></td>
+      `;
+      
+      const policyColsCount = colCount - 3;
+      for (let i = 0; i < policyColsCount; i++) {
+        cols += `<td class="policy-col"><input type="number" class="ins-val" value="0" oninput="calcInsRef()" /></td>`;
+      }
+      cols += `<td style="text-align: center;"><button class="icon-btn delete" onclick="this.closest('tr').remove(); calcInsRef();"><i class="fas fa-trash"></i></button></td>`;
+      tr.innerHTML = cols;
+      tbody.appendChild(tr);
+    }
+
+    // FORECAST ENGINE
+    async function runForecast() {
+      const startYear = parseInt(document.getElementById('forecast-start-year').value);
+      const endYear = parseInt(document.getElementById('forecast-end-year').value);
+      const funds = await dbGetAll('funds');
+      const allRules = await dbGetAll('fundRules');
+      const incomeSources = await dbGetAll('incomeSources');
+      const expenseCats = await dbGetAll('expenseCategories');
+
+      const allIncRanges = await dbGetAll('incomeRanges');
+      const allExpRanges = await dbGetAll('expenseRanges');
+
+      globalFunds = funds;
+
+      for (const s of incomeSources) s.ranges = allIncRanges.filter(r => r.sourceId === s.id);
+      for (const c of expenseCats) c.ranges = allExpRanges.filter(r => r.categoryId === c.id);
+
+      let currentFundBalances = {};
+      funds.forEach(f => currentFundBalances[f.id] = f.initialAmount);
+
+      const years = [], tableData = [];
+      let summary = { totalIncome: 0, totalExpense: 0, totalInterest: 0 };
+
+      for (let year = startYear; year <= endYear; year++) {
+        years.push(year);
+
+        let yearRules = funds.map(f => {
+          const rule = allRules.find(r => r.fundId === f.id && year >= r.startYear && year <= r.endYear);
+          return {
+            id: f.id, name: f.name, type: f.type, returnRate: f.returnRate,
+            allocationPct: rule ? rule.allocationPct : 0,
+            priority: rule ? rule.priority : 99
+          };
+        });
+
+        const totalAlloc = yearRules.reduce((s, r) => s + r.allocationPct, 0);
+        const allocWeights = {};
+        yearRules.forEach(r => allocWeights[r.id] = totalAlloc > 0 ? (r.allocationPct / totalAlloc) : (1 / funds.length));
+        
+        const sortedFundsForDeficit = [...yearRules].sort((a, b) => a.priority - b.priority);
+
+        let yearIncome = 0, yearExpense = 0;
+        incomeSources.forEach(s => s.ranges.forEach(r => { if(year >= r.startYear && year <= r.endYear) yearIncome += r.amount; }));
+        expenseCats.forEach(c => c.ranges.forEach(r => { if(year >= r.startYear && year <= r.endYear) yearExpense += r.amount; }));
+
+        const surplus = yearIncome - yearExpense;
+        const fundFlows = [];
+
+        if (surplus >= 0) {
+          for (const f of yearRules) {
+            const add = surplus * allocWeights[f.id];
+            currentFundBalances[f.id] += add;
+            if (add > 0) fundFlows.push(`${f.name}: +${formatMoney(add)}`);
+          }
+        } else {
+          let deficit = Math.abs(surplus);
+          for (const f of sortedFundsForDeficit) {
+            if (deficit <= 0) break;
+            const avail = currentFundBalances[f.id];
+            const deduct = Math.min(avail, deficit);
+            currentFundBalances[f.id] -= deduct;
+            deficit -= deduct;
+            if (deduct > 0) fundFlows.push(`${f.name}: -${formatMoney(deduct)} (P${f.priority})`);
+          }
+        }
+
+        let yearInterest = 0;
+        for (const f of yearRules) {
+          const interest = currentFundBalances[f.id] * (f.returnRate / 100);
+          currentFundBalances[f.id] += interest;
+          yearInterest += interest;
+        }
+
+        const totalAllFunds = funds.reduce((total, f) => total + (currentFundBalances[f.id] || 0), 0);
+
+        summary.totalIncome += yearIncome;
+        summary.totalExpense += yearExpense;
+        summary.totalInterest += yearInterest;
+
+        tableData.push({
+          year, income: yearIncome, expense: yearExpense, balance: surplus,
+          interest: yearInterest, fundBalances: { ...currentFundBalances }, totalAllFunds, fundFlows
+        });
+      }
+
+      globalForecastData = tableData;
+
+      document.getElementById('forecast-summary-cards').innerHTML = `
+        <div class="card stat-box"><div class="stat-value" style="color:var(--green)">${formatMoney(summary.totalIncome)}</div><div class="stat-label">总收入</div></div>
+        <div class="card stat-box"><div class="stat-value" style="color:var(--red)">${formatMoney(summary.totalExpense)}</div><div class="stat-label">总支出</div></div>
+        <div class="card stat-box"><div class="stat-value" style="color:var(--yellow)">${formatMoney(summary.totalInterest)}</div><div class="stat-label">累计回报/利息</div></div>
+        <div class="card stat-box"><div class="stat-value" style="color:var(--green)">${formatMoney(summary.totalIncome - summary.totalExpense)}</div><div class="stat-label">净结余</div></div>
+      `;
+
+      const yearSelect = document.getElementById('snapshot-year-select');
+      yearSelect.innerHTML = years.map(y => `<option value="${y}">${y} 年</option>`).join('');
+      updateYearSnapshot();
+
+      const ctx = document.getElementById('forecastChart').getContext('2d');
+      if (forecastChart) forecastChart.destroy();
+      forecastChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: years,
+          datasets: [
+            { label: '收入', data: tableData.map(d => d.income), backgroundColor: 'rgba(74,222,128,0.7)' },
+            { label: '支出', data: tableData.map(d => d.expense), backgroundColor: 'rgba(248,113,113,0.7)' }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+
+      const thead = document.querySelector('#forecast-table thead');
+      const tbody = document.querySelector('#forecast-table tbody');
+      let th = '<tr><th>年份</th><th>收入</th><th>支出</th><th>结余</th><th>利息</th>';
+      funds.forEach(f => th += `<th>${f.name}</th>`);
+      th += '<th style="color:var(--cyan); font-weight:700;">所有账户总额</th>';
+      thead.innerHTML = th + '<th>流转动向</th></tr>';
+
+      tbody.innerHTML = tableData.map(d => `
+        <tr>
+          <td><b>${d.year}</b></td>
+          <td style="color:var(--green)">${formatMoney(d.income)}</td>
+          <td style="color:var(--red)">${formatMoney(d.expense)}</td>
+          <td style="color:${d.balance>=0?'var(--green)':'var(--red)'}">${formatMoney(d.balance)}</td>
+          <td style="color:var(--yellow)">+${formatMoney(d.interest)}</td>
+          ${funds.map(f => `<td>${formatMoney(d.fundBalances[f.id])}</td>`).join('')}
+          <td style="color:var(--cyan); font-weight:700;">${formatMoney(d.totalAllFunds)}</td>
+          <td style="font-size:10px;">${d.fundFlows.join('<br>')}</td>
+        </tr>
+      `).join('');
+
+      await renderBaselineComparisonTable();
+    }
+
+    function updateYearSnapshot() {
+      const selectedYear = parseInt(document.getElementById('snapshot-year-select').value);
+      const dataRow = globalForecastData.find(d => d.year === selectedYear);
+      const container = document.getElementById('snapshot-cards');
+
+      if (!dataRow) { container.innerHTML = '<div class="empty-state">无选定年份数据</div>'; return; }
+
+      let totalAllFunds = dataRow.totalAllFunds;
+
+      let html = `
+        <div class="card stat-box" style="border: 2px solid var(--blue); background: rgba(56, 189, 248, 0.05);">
+          <div class="stat-value" style="color:var(--blue); font-size:26px;">${formatMoney(totalAllFunds)}</div>
+          <div class="stat-label" style="font-weight:600; color:var(--text);">${selectedYear} 年资产总额 (Total All Funds)</div>
+        </div>
+      `;
+
+      globalFunds.forEach(f => {
+        const bal = dataRow.fundBalances[f.id] || 0;
+        html += `
+          <div class="card stat-box">
+            <div class="stat-value" style="color:${bal >= 0 ? 'var(--cyan)' : 'var(--red)'}">${formatMoney(bal)}</div>
+            <div class="stat-label">${f.name} 余额</div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // BASELINE VS ACTUAL ENGINE
+    function formatBaselineNameTwoRows(name) {
+      if (!name) return '';
+      const match = name.match(/^(.*?)\s*(\(.*\))$/);
+      if (match) {
+        return `<span>${match[1].trim()}</span><br><small style="font-weight:normal; opacity:0.85;">${match[2].trim()}</small>`;
+      }
+      return name;
+    }
+
+    async function renderBaselineComparisonTable() {
+      if (!globalForecastData.length) return;
+
+      const baselines = await dbGetAll('baselines');
+      const baselineValuesArr = await dbGetAll('baselineValues');
+      const actualsArr = await dbGetAll('actuals');
+
+      const actualsMap = {};
+      actualsArr.forEach(a => actualsMap[a.year] = a.amount);
+
+      const baselineValMap = {};
+      baselineValuesArr.forEach(bv => {
+        if (!baselineValMap[bv.baselineId]) baselineValMap[bv.baselineId] = {};
+        baselineValMap[bv.baselineId][bv.year] = bv.amount;
+      });
+
+      const headerRow = document.getElementById('baseline-table-header');
+      headerRow.innerHTML = `
+        <th style="text-align:center;">年份</th>
+        <th class="th-live" style="text-align:center;">实时动态预测<br><small>(DYNAMIC LIVE)</small></th>
+      `;
+
+      baselines.forEach(b => {
+        const formattedHeader = formatBaselineNameTwoRows(b.name);
+        headerRow.innerHTML += `
+          <th class="th-baseline" style="text-align:center;">
+            <div style="display:inline-block; text-align:center;">${formattedHeader}</div>
+            <button class="del-col-btn" onclick="deleteBaseline(${b.id})" title="删除此基准列">&times;</button>
+          </th>
+        `;
+      });
+
+      headerRow.innerHTML += `
+        <th class="th-actual" style="text-align:center;">实际决算总额<br><small>(MANUAL EOY)</small></th>
+        <th style="text-align:right;">偏差金额 ($)</th>
+        <th style="text-align:right;">偏差比例 (%)</th>
+      `;
+
+      const tbody = document.getElementById('baseline-table-body');
+      tbody.innerHTML = '';
+
+      globalForecastData.forEach(row => {
+        const yr = row.year;
+        const liveVal = row.totalAllFunds;
+        const actualVal = actualsMap[yr] !== undefined ? actualsMap[yr] : '';
+
+        let trHtml = `<tr>
+          <td style="text-align:center;"><b>${yr}</b></td>
+          <td style="color:var(--yellow); font-weight:600; text-align:center;">${formatMoney(liveVal)}</td>
+        `;
+
+        let lastBaselineVal = liveVal;
+        baselines.forEach(b => {
+          const val = baselineValMap[b.id] ? baselineValMap[b.id][yr] : 0;
+          lastBaselineVal = val;
+          trHtml += `<td style="color:var(--blue); font-weight:600; text-align:center;">${formatMoney(val)}</td>`;
+        });
+
+        trHtml += `
+          <td style="text-align:center;">
+            $ <input type="number" class="actual-input" value="${actualVal}" placeholder="输入结果" onchange="saveActualResult(${yr}, this.value)">
+          </td>
+        `;
+
+        if (actualVal !== '' && actualVal !== null) {
+          const diff = actualVal - lastBaselineVal;
+          const pct = lastBaselineVal !== 0 ? ((diff / lastBaselineVal) * 100).toFixed(1) : 0;
+          const badgeClass = diff > 0 ? 'badge-pos' : (diff < 0 ? 'badge-neg' : 'badge-zero');
+          const sign = diff > 0 ? '+' : '';
+
+          trHtml += `<td class="${badgeClass}">${sign}${formatMoney(diff)}</td>`;
+          trHtml += `<td class="${badgeClass}">${sign}${pct}%</td>`;
+        } else {
+          trHtml += `<td class="badge-zero" style="text-align:right;">—</td><td class="badge-zero" style="text-align:right;">—</td>`;
+        }
+
+        trHtml += `</tr>`;
+        tbody.innerHTML += trHtml;
+      });
+    }
+
+    async function freezeCurrentBaseline() {
+      if (!globalForecastData.length) {
+        alert('请先运行“生成预测”以获取数据');
+        return;
+      }
+
+      const baselines = await dbGetAll('baselines');
+      const defaultDateStr = new Date().toLocaleDateString('en-GB');
+      const defaultName = `BASELINE COLUMN ${baselines.length + 1} (${defaultDateStr})`;
+      
+      const colName = prompt('请输入基准列标签名称：', defaultName);
+      if (!colName) return;
+
+      const baselineId = await dbAdd('baselines', { name: colName });
+      for(const d of globalForecastData) {
+        await dbAdd('baselineValues', {
+          baselineId: baselineId,
+          year: d.year,
+          amount: d.totalAllFunds
+        });
+      }
+
+      await renderBaselineComparisonTable();
+    }
+
+    async function deleteBaseline(id) {
+      if (confirm('确定要删除此冻结基准列吗？')) {
+        await dbDelete('baselines', id);
+        const bvArr = await dbGetAll('baselineValues');
+        for(const bv of bvArr) if(bv.baselineId === id) await dbDelete('baselineValues', bv.id);
+        await renderBaselineComparisonTable();
+      }
+    }
+
+    async function saveActualResult(year, val) {
+      const actuals = await dbGetAll('actuals');
+      const item = actuals.find(a => a.year === year);
+
+      if (val === '' || val === null) {
+        if(item) await dbDelete('actuals', item.id);
+      } else {
+        if(item) {
+          await dbUpdate('actuals', item.id, { year: year, amount: parseFloat(val) });
+        } else {
+          await dbAdd('actuals', { year: year, amount: parseFloat(val) });
+        }
+      }
+      await renderBaselineComparisonTable();
+    }
+
+    // RESET SYSTEM
+    async function resetAllData() {
+      if (!confirm('确定要清空所有数据并重置密码吗？此操作无法撤销！')) return;
+      
+      await db.funds.clear();
+      await db.fundRules.clear();
+      await db.incomeSources.clear();
+      await db.incomeRanges.clear();
+      await db.expenseCategories.clear();
+      await db.expenseRanges.clear();
+      await db.baselines.clear();
+      await db.baselineValues.clear();
+      await db.actuals.clear();
+      await db.appSettings.clear();
+
+      masterCryptoKey = null;
+      alert('所有数据与加密配置已清空，系统即刻重置！');
+      location.reload();
+    }
+
+    // EXPORT & IMPORT BACKUP WITH TOGGLE ENCRYPTION
+    async function exportDataToJson() {
+      try {
+        const isEncryptedExport = document.getElementById('export-encrypt-toggle').checked;
+
+        const rawBackup = {
+          version: 5,
+          timestamp: new Date().toISOString(),
+          funds: await dbGetAll('funds'),
+          fundRules: await dbGetAll('fundRules'),
+          incomeSources: await dbGetAll('incomeSources'),
+          incomeRanges: await dbGetAll('incomeRanges'),
+          expenseCategories: await dbGetAll('expenseCategories'),
+          expenseRanges: await dbGetAll('expenseRanges'),
+          baselines: await dbGetAll('baselines'),
+          baselineValues: await dbGetAll('baselineValues'),
+          actuals: await dbGetAll('actuals')
+        };
+
+        let outputData;
+
+        if (isEncryptedExport) {
+          const encryptedPayload = await encryptData(rawBackup, masterCryptoKey);
+          outputData = {
+            encrypted: true,
+            version: 5,
+            timestamp: new Date().toISOString(),
+            payload: encryptedPayload
+          };
+        } else {
+          outputData = {
+            encrypted: false,
+            ...rawBackup
+          };
+        }
+
+        const jsonString = JSON.stringify(outputData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `budget_forecast_backup_${isEncryptedExport?'enc':'plain'}_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error('Export error:', err);
+        alert('导出备份失败：' + err.message);
+      }
+    }
+
+    async function importDataFromJson(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          let data = JSON.parse(e.target.result);
+
+          if (data.encrypted) {
+            if (!masterCryptoKey) {
+              alert("导入加密备份需要先解锁应用！");
+              return;
+            }
+            try {
+              data = await decryptData(data.payload, masterCryptoKey);
+            } catch (decErr) {
+              alert("备份解密失败，当前应用密码可能与导出备份时的密码不符！");
+              return;
+            }
+          }
+
+          if (!data.funds || !data.fundRules) {
+            throw new Error('无效的备份文件结构 (Invalid backup file structure)');
+          }
+
+          if (!confirm('导入备份将会重置并覆盖当前的本地数据，是否继续？')) {
+            event.target.value = '';
+            return;
+          }
+
+          await db.funds.clear();
+          await db.fundRules.clear();
+          await db.incomeSources.clear();
+          await db.incomeRanges.clear();
+          await db.expenseCategories.clear();
+          await db.expenseRanges.clear();
+          await db.baselines.clear();
+          await db.baselineValues.clear();
+          await db.actuals.clear();
+
+          if (data.funds?.length) for(const item of data.funds) await dbAdd('funds', item);
+          if (data.fundRules?.length) for(const item of data.fundRules) await dbAdd('fundRules', item);
+          if (data.incomeSources?.length) for(const item of data.incomeSources) await dbAdd('incomeSources', item);
+          if (data.incomeRanges?.length) for(const item of data.incomeRanges) await dbAdd('incomeRanges', item);
+          if (data.expenseCategories?.length) for(const item of data.expenseCategories) await dbAdd('expenseCategories', item);
+          if (data.expenseRanges?.length) for(const item of data.expenseRanges) await dbAdd('expenseRanges', item);
+          if (data.baselines?.length) for(const item of data.baselines) await dbAdd('baselines', item);
+          if (data.baselineValues?.length) for(const item of data.baselineValues) await dbAdd('baselineValues', item);
+          if (data.actuals?.length) for(const item of data.actuals) await dbAdd('actuals', item);
+
+          renderAll();
+          alert('数据已成功恢复！');
+        } catch (err) {
+          console.error('Import error:', err);
+          alert('导入失败，文件可能已损坏：' + err.message);
+        } finally {
+          event.target.value = '';
+        }
+      };
+
+      reader.readAsText(file);
+    }
+
+    function formatMoney(n) { return '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    init();
+  </script>
+
+  <!-- Offline Status Toast -->
+  <div id="offline-toast" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(100px); background:var(--card); border:1px solid var(--border); color:var(--text); padding:10px 20px; border-radius:12px; font-size:13px; z-index:2000; opacity:0; transition:all 0.4s; box-shadow:0 4px 12px rgba(0,0,0,0.3); display:flex; align-items:center; gap:8px;">
+    <i class="fas fa-wifi-slash" style="color:var(--red);"></i> <span>当前处于离线模式，数据仅保存在本地</span>
+  </div>
+
+  <script>
+    // Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('[PWA] SW registered:', reg.scope))
+          .catch(err => console.warn('[PWA] SW registration failed:', err));
+      });
+    }
+
+    // Online / Offline Toast
+    const offlineToast = document.getElementById('offline-toast');
+    function updateOnlineStatus() {
+      if (!navigator.onLine) {
+        offlineToast.style.opacity = '1';
+        offlineToast.style.transform = 'translateX(-50%) translateY(0)';
+      } else {
+        offlineToast.style.opacity = '0';
+        offlineToast.style.transform = 'translateX(-50%) translateY(100px)';
+      }
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+  </script>
+</body>
+</html>
