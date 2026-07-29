@@ -191,6 +191,9 @@
           <input type="password" id="passcode-confirm-input" placeholder="确认新密码..." style="text-align:center; font-size:18px; letter-spacing:2px;">
         </div>
         <p id="lock-error" style="color:var(--red); font-size:12px; display:none; margin-bottom:12px;"></p>
+        <div id="password-warning" style="display:none; background:rgba(248,113,113,0.1); border:1px solid var(--red); border-radius:8px; padding:10px; margin-bottom:12px; font-size:12px; color:var(--red);">
+          <i class="fas fa-triangle-exclamation"></i> <b>警告：</b>密码不可找回或重置。若遗忘密码，所有加密数据将永久丢失。请务必牢记并导出备份！
+        </div>
         <button type="submit" class="btn" style="width:100%; justify-content:center;" id="lock-btn">解锁</button>
       </form>
     </div>
@@ -234,6 +237,7 @@
           <button class="btn btn-outline" onclick="openRuleModal()"><i class="fas fa-plus"></i> 新增阶段规则</button>
         </div>
         <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">按年份阶段配置优先级 (Priority 1最高) 和分配比例。</p>
+        <p style="color:var(--yellow);font-size:11px;margin-bottom:12px;"><i class="fas fa-circle-info"></i> 提示：各账户分配比例会自动归一化为 100%。例如配置 30% 与 70% 等同于 3:7 的权重分配。</p>
         <div id="rules-list"></div>
       </div>
     </div>
@@ -579,7 +583,7 @@
     // INDEXEDDB DATABASE WITH TRANSPARENT ENCRYPTION
     // =========================================================================
     const db = new Dexie('YearlyBudgetDB_v3');
-    db.version(5).stores({
+    db.version(6).stores({
       funds: '++id',
       fundRules: '++id, fundId',
       incomeSources: '++id',
@@ -618,12 +622,31 @@
 
     async function dbAdd(table, item) {
       const payload = await encryptData(item, masterCryptoKey);
-      return await db[table].add({ payload });
+      const record = { payload };
+      // 保留索引字段在顶层，使 Dexie where() 查询真正生效
+      if (table === 'fundRules' && item.fundId !== undefined) record.fundId = item.fundId;
+      if (table === 'incomeRanges' && item.sourceId !== undefined) record.sourceId = item.sourceId;
+      if (table === 'expenseRanges' && item.categoryId !== undefined) record.categoryId = item.categoryId;
+      if (table === 'baselineValues') {
+        if (item.baselineId !== undefined) record.baselineId = item.baselineId;
+        if (item.year !== undefined) record.year = item.year;
+      }
+      if (table === 'actuals' && item.year !== undefined) record.year = item.year;
+      return await db[table].add(record);
     }
 
     async function dbUpdate(table, id, item) {
       const payload = await encryptData(item, masterCryptoKey);
-      return await db[table].update(id, { payload });
+      const record = { payload };
+      if (table === 'fundRules' && item.fundId !== undefined) record.fundId = item.fundId;
+      if (table === 'incomeRanges' && item.sourceId !== undefined) record.sourceId = item.sourceId;
+      if (table === 'expenseRanges' && item.categoryId !== undefined) record.categoryId = item.categoryId;
+      if (table === 'baselineValues') {
+        if (item.baselineId !== undefined) record.baselineId = item.baselineId;
+        if (item.year !== undefined) record.year = item.year;
+      }
+      if (table === 'actuals' && item.year !== undefined) record.year = item.year;
+      return await db[table].update(id, record);
     }
 
     async function dbDelete(table, id) {
@@ -649,6 +672,7 @@
         lockSub.innerText = "首次使用，请配置专属 Passcode 以加密保护数据";
         confirmGroup.style.display = "block";
         lockBtn.innerText = "设定密码并初始化";
+        document.getElementById('password-warning').style.display = 'block';
         lockScreen.style.display = "flex";
       } else {
         isSetupMode = false;
@@ -678,8 +702,10 @@
         const salt = window.crypto.getRandomValues(new Uint8Array(16));
         masterCryptoKey = await deriveCryptoKey(pass, salt);
 
+        // FIX: 使用随机 IV 生成验证器，避免 AES-GCM nonce 重用
+        const verifierIv = window.crypto.getRandomValues(new Uint8Array(12));
         const encCheck = await window.crypto.subtle.encrypt(
-          { name: "AES-GCM", iv: new Uint8Array(12) },
+          { name: "AES-GCM", iv: verifierIv },
           masterCryptoKey,
           new TextEncoder().encode("VALID_PASSPHRASE")
         );
@@ -687,6 +713,7 @@
         await db.appSettings.put({
           key: 'auth',
           salt: Array.from(salt),
+          verifierIv: Array.from(verifierIv),   // 存储 IV 供后续验证使用
           verifier: Array.from(new Uint8Array(encCheck))
         });
 
@@ -700,8 +727,12 @@
         const testKey = await deriveCryptoKey(pass, salt);
 
         try {
+          // FIX: 读取存储的 verifierIv；兼容旧版本（无 verifierIv 时回退零 IV）
+          const verifierIv = authSetting.verifierIv
+            ? new Uint8Array(authSetting.verifierIv)
+            : new Uint8Array(12);
           const dec = await window.crypto.subtle.decrypt(
-            { name: "AES-GCM", iv: new Uint8Array(12) },
+            { name: "AES-GCM", iv: verifierIv },
             testKey,
             new Uint8Array(authSetting.verifier)
           );
@@ -762,8 +793,9 @@
       const newSalt = window.crypto.getRandomValues(new Uint8Array(16));
       masterCryptoKey = await deriveCryptoKey(newPass, newSalt);
 
+      const newVerifierIv = window.crypto.getRandomValues(new Uint8Array(12));
       const encCheck = await window.crypto.subtle.encrypt(
-        { name: "AES-GCM", iv: new Uint8Array(12) },
+        { name: "AES-GCM", iv: newVerifierIv },
         masterCryptoKey,
         new TextEncoder().encode("VALID_PASSPHRASE")
       );
@@ -771,6 +803,7 @@
       await db.appSettings.put({
         key: 'auth',
         salt: Array.from(newSalt),
+        verifierIv: Array.from(newVerifierIv),
         verifier: Array.from(new Uint8Array(encCheck))
       });
 
@@ -1698,10 +1731,10 @@
   </div>
 
   <script>
-    // Service Worker Registration
+    // Service Worker Registration (相对路径，适配子目录部署)
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
+        navigator.serviceWorker.register('./sw.js')
           .then(reg => console.log('[PWA] SW registered:', reg.scope))
           .catch(err => console.warn('[PWA] SW registration failed:', err));
       });

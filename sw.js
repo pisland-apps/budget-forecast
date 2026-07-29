@@ -1,19 +1,22 @@
-const CACHE_NAME = 'budget-forecast-v1';
+const CACHE_NAME = 'budget-forecast-v2';
+
+// 动态计算基础路径，适配 GitHub Pages 子目录部署
+const BASE = self.location.pathname.replace(/[^/]+$/, '');
+
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon-72x72.png',
-  '/icons/icon-96x96.png',
-  '/icons/icon-128x128.png',
-  '/icons/icon-144x144.png',
-  '/icons/icon-152x152.png',
-  '/icons/icon-192x192.png',
-  '/icons/icon-384x384.png',
-  '/icons/icon-512x512.png'
+  `${BASE}`,
+  `${BASE}index.html`,
+  `${BASE}manifest.json`,
+  `${BASE}icons/icon-72x72.png`,
+  `${BASE}icons/icon-96x96.png`,
+  `${BASE}icons/icon-128x128.png`,
+  `${BASE}icons/icon-144x144.png`,
+  `${BASE}icons/icon-152x152.png`,
+  `${BASE}icons/icon-192x192.png`,
+  `${BASE}icons/icon-384x384.png`,
+  `${BASE}icons/icon-512x512.png`
 ];
 
-// CDN 资源 (运行时缓存)
 const CDN_HOSTS = [
   'cdn.jsdelivr.net',
   'cdnjs.cloudflare.com'
@@ -45,7 +48,7 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // 1. 同源静态资源 -> CacheFirst
+  // 同源静态资源 -> CacheFirst
   if (url.origin === self.location.origin) {
     event.respondWith(
       caches.match(request).then((cached) => {
@@ -62,7 +65,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. CDN 资源 (JS, CSS, Fonts) -> StaleWhileRevalidate
+  // CDN 资源 -> StaleWhileRevalidate
   if (CDN_HOSTS.some((host) => url.hostname.includes(host))) {
     event.respondWith(
       caches.match(request).then((cached) => {
@@ -79,7 +82,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. 其他跨域请求 -> 直接网络，失败时尝试缓存
+  // 其他请求 -> NetworkFirst
   event.respondWith(
     fetch(request).catch(() => caches.match(request))
   );

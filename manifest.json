@@ -1,13 +1,13 @@
 {
   "name": "Dynamic Budget Forecast",
   "short_name": "BudgetForecast",
-  "description": "年度预算预测与资金分配规划工具，支持分阶段账户结余分配、赤字扣款优先级动态调整及加密保护。",
-  "start_url": "/",
+  "description": "年度预算预测与资金分配规划工具",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "orientation": "portrait-primary",
-  "scope": "/",
+  "scope": ".",
   "lang": "zh-CN",
   "icons": [
     {
@@ -62,6 +62,5 @@
   "categories": [
     "finance",
     "productivity"
-  ],
-  "screenshots": []
+  ]
 }
